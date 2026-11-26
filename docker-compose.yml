@@ -1,0 +1,18 @@
+services:
+  lan-share:
+    build: .
+    container_name: lan-share
+    ports:
+      - "9010:3000"
+    volumes:
+      - ./data:/app/data
+      - ./server:/app/server:ro
+      - ./public:/app/public:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - MAX_FILE_SIZE_MB=10240
+      - HOST_LAN_URL=${HOST_LAN_URL:-}
+      - HOST_COMPUTER_NAME=${HOST_COMPUTER_NAME:-}
+    restart: unless-stopped

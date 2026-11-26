@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <title>局域网文件与文本共享 | LAN Share</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="color-scheme" content="light dark">
+    <link rel="icon" sizes="96x96" href="images/favicon-96x96.png">
+    <link rel="shortcut icon" href="images/favicon-96x96.png">
+    <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+    <link rel="stylesheet" type="text/css" href="styles/lan-share.css">
+</head>
+
+<body>
+    <div id="app" class="app-shell">
+        <!-- 顶部导航栏 -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="brand">
+                    <span class="brand-logo" aria-hidden="true">⇄</span>
+                    <div class="brand-text">
+                        <h1>LAN Share</h1>
+                        <span id="ws-status" class="status-pill status-connecting">连接中...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="topbar-actions">
+                <button id="btn-room" class="btn btn-outline" type="button" title="切换或创建6位房间">
+                    <span class="dot-room"></span>
+                    <span id="current-room-label">全局局域网大厅</span>
+                </button>
+                <button id="btn-qr" class="btn btn-outline" type="button" title="显示手机扫码访问二维码">
+                    📱 扫码访问
+                </button>
+                <button id="btn-rename" class="btn btn-ghost" type="button" title="修改当前设备名称">
+                    💻 <span id="self-name-label">加载中...</span>
+                </button>
+                <button id="btn-theme" class="btn btn-icon" type="button" title="切换明暗主题">
+                    🌓
+                </button>
+            </div>
+        </header>
+
+        <!-- 在线设备栏 -->
+        <section class="peers-bar" aria-label="在线设备">
+            <div class="peers-bar-header">
+                <span class="peers-title">在线设备 (<span id="peers-count">1</span>)</span>
+                <span id="target-hint" class="target-hint">默认发送给当前房间所有设备（点击设备可切换私发）</span>
+            </div>
+            <div id="peers-list" class="peers-list"></div>
+        </section>
+
+        <!-- 移动端视图切换 Tab -->
+        <nav class="mobile-tabs" aria-label="功能切换">
+            <button type="button" class="mobile-tab active" data-tab="chat">
+                💬 聊天与图片 <span id="badge-chat-count" class="tab-badge">0</span>
+            </button>
+            <button type="button" class="mobile-tab" data-tab="files">
+                📁 共享文件 <span id="badge-files-count" class="tab-badge">0</span>
+            </button>
+        </nav>
+
+        <!-- 主工作区：左侧聊天与图片流 + 右侧主机共享文件区 -->
+        <main class="workspace">
+            <!-- 聊天与图片面板 -->
+            <section id="panel-chat" class="panel panel-chat active-mobile-panel">
+                <div class="panel-header">
+                    <div class="panel-title-group">
+                        <h2>💬 多设备聊天记录</h2>
+                        <span class="panel-subtitle">支持文本、网址自动识别、截图粘贴及图片直显</span>
+                    </div>
+                    <div class="panel-actions">
+                        <button id="btn-chat-batch-toggle" class="btn btn-sm btn-ghost" type="button">批量管理</button>
+                    </div>
+                </div>
+
+                <!-- 聊天批量操作条 -->
+                <div id="chat-batch-bar" class="batch-bar" hidden>
+                    <label class="checkbox-label">
+                        <input id="chk-chat-select-all" type="checkbox"> 全选
+                    </label>
+                    <div class="batch-bar-right">
+                        <span id="chat-selected-count" class="selected-count">已选 0 条</span>
+                        <button id="btn-chat-delete-selected" class="btn btn-sm btn-danger" type="button" disabled>删除所选</button>
+                        <button id="btn-chat-batch-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+                    </div>
+                </div>
+
+                <!-- 聊天消息列表 -->
+                <div id="chat-feed" class="chat-feed">
+                    <div class="empty-state">暂无聊天记录，发送一段文本或粘贴/选择一张图片试试吧</div>
+                </div>
+
+                <!-- 底部输入区 -->
+                <form id="chat-form" class="chat-composer">
+                    <div id="composer-target-banner" class="composer-target-banner" hidden>
+                        <span>正在私发给：<strong id="composer-target-name"></strong></span>
+                        <button id="btn-clear-target" type="button" class="link-btn">恢复群发</button>
+                    </div>
+                    <div class="composer-row">
+                        <div class="composer-tools">
+                            <button id="btn-pick-image" class="btn btn-icon-text" type="button" title="发送图片（直接展示）">
+                                🖼️ 图片
+                            </button>
+                            <button id="btn-pick-file-chat" class="btn btn-icon-text" type="button" title="发送文件到主机">
+                                📎 文件
+                            </button>
+                            <input id="input-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif" multiple hidden>
+                        </div>
+                        <textarea id="chat-input" rows="2" placeholder="输入文本消息、粘贴网址或 Ctrl+V 直接粘贴截图发送... (Enter 发送，Shift+Enter 换行)"></textarea>
+                        <button id="btn-send-text" class="btn btn-primary" type="submit">发送</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- 主机共享文件面板 -->
+            <section id="panel-files" class="panel panel-files">
+                <div class="panel-header">
+                    <div class="panel-title-group">
+                        <h2>📁 主机共享文件</h2>
+                        <span class="panel-subtitle">文件持久化保存于主机磁盘，随时下载或手动批量清理</span>
+                    </div>
+                    <div class="panel-actions">
+                        <button id="btn-files-batch-toggle" class="btn btn-sm btn-ghost" type="button">批量管理</button>
+                    </div>
+                </div>
+
+                <!-- 拖拽上传区 -->
+                <div id="upload-dropzone" class="upload-dropzone">
+                    <div class="dropzone-content">
+                        <span>将任意文件或图片拖拽到此处，或</span>
+                        <button id="btn-pick-files" class="btn btn-primary btn-sm" type="button">选择文件上传</button>
+                    </div>
+                    <input id="input-any-file" type="file" multiple hidden>
+                </div>
+
+                <!-- 上传进度队列 -->
+                <div id="upload-queue" class="upload-queue" hidden></div>
+
+                <!-- 过滤与批量控制条 -->
+                <div class="files-toolbar">
+                    <div class="filter-pills" role="tablist">
+                        <button type="button" class="filter-pill active" data-filter="all">全部</button>
+                        <button type="button" class="filter-pill" data-filter="files">仅文件</button>
+                        <button type="button" class="filter-pill" data-filter="images">仅图片</button>
+                    </div>
+                    <span id="files-summary" class="files-summary">0 个项目</span>
+                </div>
+
+                <div id="files-batch-bar" class="batch-bar" hidden>
+                    <label class="checkbox-label">
+                        <input id="chk-files-select-all" type="checkbox"> 全选当前列表
+                    </label>
+                    <div class="batch-bar-right">
+                        <span id="files-selected-count" class="selected-count">已选 0 项</span>
+                        <button id="btn-files-delete-selected" class="btn btn-sm btn-danger" type="button" disabled>批量删除</button>
+                        <button id="btn-files-batch-cancel" class="btn btn-sm btn-ghost" type="button">取消</button>
+                    </div>
+                </div>
+
+                <!-- 文件列表 -->
+                <div id="files-list" class="files-list">
+                    <div class="empty-state">当前房间暂无保存的文件</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 全屏拖拽上传遮罩 -->
+    <div id="global-drop-overlay" class="global-drop-overlay" hidden>
+        <div class="drop-overlay-card">
+            <div class="drop-icon">📤</div>
+            <h3>松开即可上传到局域网主机</h3>
+            <p>图片将在聊天面板直接显示，其他文件保存至共享文件区</p>
+        </div>
+    </div>
+
+    <!-- 房间管理弹窗 -->
+    <dialog id="dialog-room" class="modal">
+        <div class="modal-header">
+            <h3>房间与设备发现</h3>
+            <button type="button" class="modal-close" data-close-dialog="dialog-room">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc">默认情况下，所有接入主机网页的设备都会直接出现在「全局局域网大厅」。如需隔离会话，可创建或加入 6 位房间码。</p>
+            <div class="room-current-box">
+                当前所在：<strong id="modal-room-current">全局局域网大厅</strong>
+            </div>
+            <div class="modal-section">
+                <button id="btn-create-room" class="btn btn-primary btn-block" type="button">✨ 创建新的 6 位随机房间</button>
+            </div>
+            <div class="modal-divider">或输入已有房间码加入</div>
+            <form id="form-join-room" class="join-room-form">
+                <input id="input-room-code" type="text" maxlength="16" placeholder="输入 4~16 位房间码（如 6 位数字）" autocomplete="off">
+                <button class="btn btn-outline" type="submit">立即加入</button>
+            </form>
+            <div class="modal-section">
+                <button id="btn-leave-room" class="btn btn-ghost btn-block" type="button">返回全局局域网大厅</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- 二维码访问弹窗 -->
+    <dialog id="dialog-qr" class="modal">
+        <div class="modal-header">
+            <h3>手机扫码打开网页</h3>
+            <button type="button" class="modal-close" data-close-dialog="dialog-qr">✕</button>
+        </div>
+        <div class="modal-body center-col">
+            <div id="qr-container" class="qr-box"></div>
+            <p id="qr-url-text" class="qr-url-text"></p>
+            <p id="qr-hint-text" class="modal-desc"></p>
+            <button id="btn-copy-qr-url" class="btn btn-primary" type="button">复制访问链接</button>
+        </div>
+    </dialog>
+
+    <!-- 修改昵称弹窗 -->
+    <dialog id="dialog-rename" class="modal">
+        <div class="modal-header">
+            <h3 id="rename-dialog-title">设置当前设备名称</h3>
+            <button type="button" class="modal-close" data-close-dialog="dialog-rename">✕</button>
+        </div>
+        <form id="form-rename" class="modal-body">
+            <p id="rename-dialog-desc" class="modal-desc">为这台电脑或手机起一个好认的名字（如电脑名或姓名），仅首次设置一次，浏览器会自动记住。</p>
+            <input id="input-display-name" type="text" maxlength="40" placeholder="例如：张三的MacBook / 开发机 / 我的iPhone" required>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close-dialog="dialog-rename">暂不修改</button>
+                <button type="submit" class="btn btn-primary">保存并记住</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- 图片大图预览 Lightbox -->
+    <dialog id="dialog-lightbox" class="lightbox">
+        <div class="lightbox-toolbar">
+            <span id="lightbox-caption" class="lightbox-caption"></span>
+            <div class="lightbox-actions">
+                <button id="btn-lightbox-prev" type="button" class="btn btn-sm btn-dark">◀ 上一张</button>
+                <button id="btn-lightbox-next" type="button" class="btn btn-sm btn-dark">下一张 ▶</button>
+                <a id="btn-lightbox-download" href="#" download class="btn btn-sm btn-primary">⬇ 下载原图</a>
+                <button type="button" class="btn btn-sm btn-dark" data-close-dialog="dialog-lightbox">✕ 关闭</button>
+            </div>
+        </div>
+        <div class="lightbox-stage">
+            <img id="lightbox-img" src="" alt="图片预览">
+        </div>
+    </dialog>
+
+    <!-- Toast 提示容器 -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <script src="scripts/libs/qr-code.min.js" defer></script>
+    <script src="scripts/lan-client.js" defer></script>
+</body>
+
+</html>
